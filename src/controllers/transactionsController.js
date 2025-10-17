@@ -1,0 +1,99 @@
+import { sql } from "../config/db.js";
+
+// ✅ Get transactions by user ID
+export async function getTransactionByUserId(req, res) {
+  try {
+    const { userId } = req.params;
+    const transactions = await sql`
+      SELECT * FROM transactions WHERE user_id = ${userId}
+    `;
+    res.status(201).json(transactions);
+  } catch (error) {
+    console.log("❌ ERROR GETTING TRANSACTION:", error);
+    res.status(500).json({ message: "Server error while GETTING transaction" });
+  }
+}
+
+// ✅ Create new transaction
+export async function getNewTransaction(req, res) {
+  try {
+    const { title, amount, category, user_id } = req.body;
+
+    if (!title || !amount || !category || !user_id) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const transaction = await sql`
+      INSERT INTO transactions (user_id, title, amount, category)
+      VALUES (${user_id}, ${title}, ${amount}, ${category})
+      RETURNING *
+    `;
+
+    res.status(201).json(transaction[0]);
+  } catch (error) {
+    console.log("❌ ERROR CREATING TRANSACTION:", error);
+    res.status(500).json({ message: "Server error while creating transaction" });
+  }
+}
+
+// ✅ Delete transaction by ID
+export async function deleteTransactionsById(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (isNaN(parseInt(id))) {
+      return res.status(400).json({ message: "Invalid transaction id" });
+    }
+
+    const result = await sql`
+      DELETE FROM transactions WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    res.status(200).json({
+      message: "Transaction deleted successfully",
+      deleted: result[0],
+    });
+  } catch (error) {
+    console.log("❌ ERROR DELETING TRANSACTION:", error);
+    res.status(500).json({ message: "Server error while deleting transaction" });
+  }
+}
+
+// ✅ Get summary for user
+export async function getSummaryByUserId(req, res) {
+  try {
+    const { userId } = req.params;
+
+    const balanceResults = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS balance 
+      FROM transactions 
+      WHERE user_id = ${userId}
+    `;
+
+    const incomeResult = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS income 
+      FROM transactions 
+      WHERE user_id = ${userId} AND amount > 0
+    `;
+
+    const expensesResult = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS expenses
+      FROM transactions 
+      WHERE user_id = ${userId} AND amount < 0
+    `;
+
+    res.status(200).json({
+      income: incomeResult[0].income,
+      expense: expensesResult[0].expenses,
+      balance: balanceResults[0].balance,
+    });
+  } catch (error) {
+    console.log("❌ ERROR WHILE GETTING SUMMARY:", error);
+    res.status(500).json({ message: "Server error while getting summary" });
+  }
+}
